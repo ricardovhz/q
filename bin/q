@@ -520,7 +520,7 @@ class TableColumnInferer(object):
             pass
 
         try:
-            f = float(value)
+            f = locale.atof(value)
             return float
         except:
             pass
@@ -1003,7 +1003,17 @@ class TableCreator(object):
                 new_vals[i] = None
         return new_vals
 
+    def normalize_numeric_col_val_if_needed(self, v, column_type):
+        try:
+            if column_type == float:
+                return locale.atof(v)
+        except Exception as e:
+            pass
+        return v
+
     def normalize_col_vals(self, col_vals):
+        col_vals = [self.normalize_numeric_col_val_if_needed(col_vals[i], self.column_inferer.get_column_types()[i]) for i in range(len(col_vals))]
+
         # Make sure that numeric column indices are initializd
         self.initialize_numeric_column_indices_if_needed()
 
@@ -1671,6 +1681,7 @@ def run_standalone():
     default_output_encoding = get_option_with_default(p, 'string', 'encoding', None)
     default_query_encoding = get_option_with_default(p, 'string', 'query_encoding', locale.getpreferredencoding())
     default_output_header = get_option_with_default(p, 'string', 'output_header', False)
+    default_locale = '{}.{}'.format(*locale.getlocale())
 
     parser = OptionParser(usage="""
         q allows performing SQL-like statements on tabular text data.
@@ -1710,6 +1721,8 @@ def run_standalone():
                       help="Save database to an sqlite database file")
     parser.add_option("", "--save-db-to-disk-method", dest="save_db_to_disk_method", default='standard',
                       help="Method to use to save db to disk. 'standard' does not require any deps, 'fast' currenty requires manually running `pip install sqlitebck` on your python installation. Once packing issues are solved, the fast method will be the default.")
+    parser.add_option("-l", "--locale", dest="set_locale", default=default_locale,
+                      help="Sets the data's locale (Ex.: en_US, en_US.UTF-8, pt_BR). Defaults to the system's default locale")
     #-----------------------------------------------
     input_data_option_group = OptionGroup(parser,"Input Data Options")
     input_data_option_group.add_option("-H", "--skip-header", dest="skip_header", default=default_skip_header, action="store_true",
@@ -1895,6 +1908,13 @@ def run_standalone():
         if options.save_db_to_disk_method not in ['standard','fast']:
             print("save-db-to-disk method should be either standard or fast (%s)" % options.save_db_to_disk_method, file=sys.stderr)
             sys.exit(78)
+
+    if options.set_locale is not None:
+        if '.' in options.set_locale:
+            locale.setlocale(locale.LC_ALL, options.set_locale)
+        else:
+            enc = locale.getpreferredencoding()
+            locale.setlocale(locale.LC_ALL, '{}.{}'.format(options.set_locale, enc))
 
     default_input_params = QInputParams(skip_header=options.skip_header,
         delimiter=options.delimiter,
